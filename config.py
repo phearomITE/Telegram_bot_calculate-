@@ -1,4 +1,3 @@
-# config.py
 import os
 
 BOT_TOKEN = "8420018950:AAFZugWzWORp4jJLi3aJZE-0Kw4jV7r9Vbg"

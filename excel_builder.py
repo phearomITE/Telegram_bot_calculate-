@@ -1,4 +1,3 @@
-# excel_builder.py
 import io
 import pandas as pd
 from openpyxl import Workbook
@@ -6,70 +5,30 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from config import EXCHANGE_RATE_DEFAULT
 
-# ------------- Sheet tracking rules -------------
-#
-# Oil sheet           : Category = "Cooking Oil" or "Oil"
-# Powder Detergent    : Category = "Detergent" AND Sub-Category = "Powder"
-# Liquid Detergent    : Category = "Detergent" AND Sub-Category = "Liquid"
-# Milk                : Category = "Milk"
-# Dishwash            : Category = "Dishwash"
-# Fabric Softener     : Category = "Fabric Softener"
-# Eco Dishwash        : Category = "Eco Dishwash"
-# Toilet              : Category = "Toilet"
-# Otherwise           : Data
-#
-
+# ---------------- Sheet selection ----------------
 def choose_sheet_name(data: dict) -> str:
-    """Decide Excel sheet name from Category / Sub-Category."""
     category = (data.get("category") or "").strip().lower()
     sub_cat = (data.get("sub_category") or "").strip().lower()
-
     if category in ("cooking oil", "oil"):
         return "Oil"
-
     if category == "detergent" and sub_cat == "powder":
         return "Powder Detergent"
-
     if category == "detergent" and sub_cat == "liquid":
         return "Liquid Detergent"
-
     if category == "milk":
         return "Milk"
-
     if category == "dishwash":
         return "Dishwash"
-
     if category == "fabric softener":
         return "Fabric Softener"
-
     if category == "eco dishwash":
         return "Eco Dishwash"
-
     if category == "toilet":
         return "Toilet"
-
     return "Data"
 
-# ------------- Calculations -------------
-
+# ---------------- Calculations ----------------
 def calculate_fields(data: dict) -> dict:
-    """
-    WHOLESALE BUY-IN
-      Discount(%)      = FOC / (Scheme(Base) + FOC)
-      Discount($)      = Discount(%) * Buy-in
-      Direct Disc.($)  = Direct Disc.(%) * Buy-in
-      Net Buy-in       = Buy-in - (Discount($) + Direct Disc.($))
-      Price/100ml      = Net Buy-in / ((Size * Packs) / 100)
-
-    WHOLESALE SELL-OUT
-      Sell-out($)      = Net Buy-in + Mark-up
-      Sell-out(KHR)    = Sell-out($) * Exchange Rate
-
-    RETAIL
-      Margin/Unit      = Price/Unit - (Sell-out(KHR) / Packs)
-      Price/Ctn        = Price/Unit * Packs
-      Margin/Ctn       = Price/Ctn - Sell-out(KHR)
-    """
     buy_in = data.get("buy_in")
     scheme = data.get("scheme_base")
     foc = data.get("foc")
@@ -89,7 +48,6 @@ def calculate_fields(data: dict) -> dict:
     if price_unit_khr is None:
         raise ValueError("Price Unit (KHR) is required")
 
-    # WHOLESALE BUY-IN
     if scheme and foc and (scheme + foc) != 0:
         discount_pct = (foc / (scheme + foc)) * 100.0
     else:
@@ -103,12 +61,10 @@ def calculate_fields(data: dict) -> dict:
     total_unit = size_ml * packs if size_ml and packs else 0
     price_100ml = net_buy_in / (total_unit / 100.0) if total_unit else None
 
-    # WHOLESALE SELL-OUT
     if not sell_out_usd:
         sell_out_usd = net_buy_in + mark_up
     sell_out_khr = sell_out_usd * exchange_rate
 
-    # RETAIL
     margin_unit_khr = price_unit_khr - (sell_out_khr / packs)
     price_ctn_khr = price_unit_khr * packs
     margin_ctn_khr = price_ctn_khr - sell_out_khr
@@ -130,10 +86,8 @@ def calculate_fields(data: dict) -> dict:
     )
     return result
 
-# ------------- Row mapping with units in values -------------
-
+# ---------------- Row mapping ----------------
 def _fmt(value, unit: str | None = None):
-    """Format numeric value with unit as text, e.g. 22.5 -> '22.5 $'."""
     if value is None:
         return None
     if unit:
@@ -141,7 +95,6 @@ def _fmt(value, unit: str | None = None):
     return value
 
 def _row_from_data(data: dict) -> dict:
-    """Convert internal data dict to Excel row, embedding units in cell values."""
     return {
         "Date": data.get("date"),
         "Address": data.get("address"),
@@ -149,13 +102,9 @@ def _row_from_data(data: dict) -> dict:
         "Sub-Category": data.get("sub_category"),
         "Brand": data.get("brand"),
         "Packaging": data.get("packaging"),
-
-        # PRODUCT INFO
         "Size": _fmt(data.get("size_ml"), "ml"),
         "Packs": data.get("packs"),
         "Weight per Ctn": _fmt(data.get("weight_ctn_l"), "L"),
-
-        # WHOLESALE BUY-IN
         "Buy-in": _fmt(data.get("buy_in"), "$"),
         "Scheme(base)": data.get("scheme_base"),
         "FOC": data.get("foc"),
@@ -165,29 +114,18 @@ def _row_from_data(data: dict) -> dict:
         "Direct Disc($)": _fmt(data.get("direct_disc_value"), "$"),
         "Net Buy-in": _fmt(data.get("net_buy_in"), "$"),
         "Price / 100ml": _fmt(data.get("price_100ml"), "$"),
-
-        # WHOLESALE SELL-OUT
         "Mark - up": _fmt(data.get("mark_up"), "$"),
         "Sell Out ($)": _fmt(data.get("sell_out_usd"), "$"),
         "Exchange Rate": data.get("exchange_rate"),
         "Sell Out (KHR)": _fmt(data.get("sell_out_khr"), "KHR"),
-
-        # RETAIL
         "Price Unit (KHR)": _fmt(data.get("price_unit_khr"), "KHR"),
         "Margin/Unit (KHR)": _fmt(data.get("margin_unit_khr"), "KHR"),
         "Price Ctn (KHR)": _fmt(data.get("price_ctn_khr"), "KHR"),
         "Margin/Ctn (KHR)": _fmt(data.get("margin_ctn_khr"), "KHR"),
     }
 
-# ------------- Excel builder -------------
-
+# ---------------- Excel builder ----------------
 def build_excel_from_sheet_dict(sheet_rows: dict) -> bytes:
-    """
-    Build Excel with:
-      - Row 1: PRODUCT INFO | WHOLESALE BUY-IN | WHOLESALE SELL-OUT | RETAIL
-      - Row 2: Column headers (no units, units are inside values)
-      - Row 3+: Data rows sorted by Date, values like '22.5 $', '12 L'
-    """
     wb = Workbook()
     wb.remove(wb.active)
 
@@ -199,21 +137,20 @@ def build_excel_from_sheet_dict(sheet_rows: dict) -> bytes:
 
         # Row 1: colored section headers
         section_headers = [
-            ("A", "I", "PRODUCT INFO", "FF105437"),      # dark green
-            ("J", "R", "WHOLESALE BUY-IN", "FF0070C0"),  # blue
-            ("S", "V", "WHOLESALE SELL-OUT", "FF7030A0"),# purple
-            ("W", "Z", "RETAIL", "FFED7D31"),            # orange
+            ("A", "I", "PRODUCT INFO", "FF105437"),
+            ("J", "R", "WHOLESALE BUY-IN", "FF0070C0"),
+            ("S", "V", "WHOLESALE SELL-OUT", "FF7030A0"),
+            ("W", "Z", "RETAIL", "FFED7D31"),
         ]
         for col_start, col_end, label, color in section_headers:
-            start_row = 1
-            ws.merge_cells(f"{col_start}{start_row}:{col_end}{start_row}")
-            cell = ws[f"{col_start}{start_row}"]
+            ws.merge_cells(f"{col_start}1:{col_end}1")
+            cell = ws[f"{col_start}1"]
             cell.value = label
             cell.font = Font(bold=True, size=11, color="FFFFFF")
             cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        # Row 2: column headers (plain text)
+        # Row 2: headers
         headers = [
             "Date", "Address", "Category", "Sub-Category", "Brand", "Packaging",
             "Size", "Packs", "Weight per Ctn",
@@ -222,7 +159,6 @@ def build_excel_from_sheet_dict(sheet_rows: dict) -> bytes:
             "Mark - up", "Sell Out ($)", "Exchange Rate", "Sell Out (KHR)",
             "Price Unit (KHR)", "Margin/Unit (KHR)", "Price Ctn (KHR)", "Margin/Ctn (KHR)",
         ]
-
         for col_num, header in enumerate(headers, start=1):
             cell = ws.cell(row=2, column=col_num)
             cell.value = header

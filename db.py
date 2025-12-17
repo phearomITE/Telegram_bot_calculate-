@@ -1,56 +1,21 @@
-# db.py
 import pymysql
 from config import (
-    MYSQL_HOST,
-    MYSQL_PORT,
-    MYSQL_DB,
-    MYSQL_USER,
-    MYSQL_PASSWORD,
-    PG_TABLE_BASE,
+    MYSQL_HOST, MYSQL_PORT, MYSQL_DB, MYSQL_USER, MYSQL_PASSWORD, PG_TABLE_BASE
 )
 
-# Common columns shared by all sheet tables
 COMMON_COLUMNS = [
-    "date DATE",
-    "address TEXT",
-    "outlet_type TEXT",
-    "category TEXT",
-    "sub_category TEXT",
-    "brand TEXT",
-    "packaging TEXT",
-    "size_ml DOUBLE",
-    "packs INT",
-    "weight_ctn_l DOUBLE",
-    "buy_in DOUBLE",
-    "scheme_base DOUBLE",
-    "foc DOUBLE",
-    "discount_pct DOUBLE",
-    "discount_value DOUBLE",
-    "direct_disc_pct DOUBLE",
-    "direct_disc_value DOUBLE",
-    "net_buy_in DOUBLE",
-    "price_100ml DOUBLE",
-    "mark_up DOUBLE",
-    "sell_out_usd DOUBLE",
-    "exchange_rate DOUBLE",
-    "sell_out_khr DOUBLE",
-    "price_unit_khr DOUBLE",
-    "margin_unit_khr DOUBLE",
-    "price_ctn_khr DOUBLE",
-    "margin_ctn_khr DOUBLE",
+    "date DATE", "address TEXT", "outlet_type TEXT", "category TEXT", "sub_category TEXT",
+    "brand TEXT", "packaging TEXT", "size_ml DOUBLE", "packs INT", "weight_ctn_l DOUBLE",
+    "buy_in DOUBLE", "scheme_base DOUBLE", "foc DOUBLE", "discount_pct DOUBLE",
+    "discount_value DOUBLE", "direct_disc_pct DOUBLE", "direct_disc_value DOUBLE",
+    "net_buy_in DOUBLE", "price_100ml DOUBLE", "mark_up DOUBLE", "sell_out_usd DOUBLE",
+    "exchange_rate DOUBLE", "sell_out_khr DOUBLE", "price_unit_khr DOUBLE",
+    "margin_unit_khr DOUBLE", "price_ctn_khr DOUBLE", "margin_ctn_khr DOUBLE",
 ]
 
-# All sheet names used in Excel and DB
 SHEET_NAMES = [
-    "Oil",
-    "Powder Detergent",
-    "Liquid Detergent",
-    "Milk",
-    "Dishwash",
-    "Fabric Softener",
-    "Eco Dishwash",
-    "Toilet",
-    "Data",
+    "Oil", "Powder Detergent", "Liquid Detergent", "Milk", "Dishwash",
+    "Fabric Softener", "Eco Dishwash", "Toilet", "Data",
 ]
 
 def table_name_for_sheet(sheet_name: str) -> str:
@@ -97,7 +62,6 @@ def insert_row(sheet_name: str, data: dict):
     """Insert a single row of data into the sheet's table."""
     ensure_table(sheet_name)
     tbl = table_name_for_sheet(sheet_name)
-
     cols = [
         "date","address","outlet_type","category","sub_category","brand",
         "packaging","size_ml","packs","weight_ctn_l","buy_in","scheme_base",
@@ -119,10 +83,7 @@ def insert_row(sheet_name: str, data: dict):
         conn.close()
 
 def fetch_all_rows_by_sheet() -> dict:
-    """
-    Return { sheet_name: [row_dict, ...] } for all known sheets.
-    Used when building the Excel workbook.
-    """
+    """Return { sheet_name: [row_dict, ...] } for all known sheets."""
     result = {}
     cols = [
         "date","address","outlet_type","category","sub_category","brand",
@@ -132,7 +93,6 @@ def fetch_all_rows_by_sheet() -> dict:
         "sell_out_usd","exchange_rate","sell_out_khr","price_unit_khr",
         "margin_unit_khr","price_ctn_khr","margin_ctn_khr"
     ]
-
     conn = get_conn()
     try:
         for sheet in SHEET_NAMES:
@@ -145,5 +105,4 @@ def fetch_all_rows_by_sheet() -> dict:
             result[sheet] = sheet_rows
     finally:
         conn.close()
-
     return result

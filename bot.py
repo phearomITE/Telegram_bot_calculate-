@@ -1,4 +1,3 @@
-# bot.py
 import logging
 from telegram import Update, InputFile
 from telegram.ext import (
@@ -47,6 +46,7 @@ EXAMPLE_TEXT = (
     "Price Unit: 1000\n"
 )
 
+# ---------------- Handlers ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Send one or many products.\n"
@@ -73,8 +73,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             new_count += 1
 
         sheet_rows_raw = fetch_all_rows_by_sheet()
-        sheet_rows = {s: [_row_from_data(r) for r in rows]
-                      for s, rows in sheet_rows_raw.items()}
+        sheet_rows = {s: [_row_from_data(r) for r in rows] for s, rows in sheet_rows_raw.items()}
 
         excel_bytes = build_excel_from_sheet_dict(sheet_rows)
         total_rows = sum(len(v) for v in sheet_rows.values())
@@ -87,6 +86,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("Error processing message")
         await update.message.reply_text(f"Error: {e}")
 
+# ---------------- Main ----------------
 def main():
     init_db()
     app = ApplicationBuilder().token(BOT_TOKEN).build()

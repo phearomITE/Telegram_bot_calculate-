@@ -1,4 +1,3 @@
-# parser.py
 import re
 from dateutil import parser as dateparser
 
@@ -16,7 +15,6 @@ def _extract_value(text, key_pattern):
 
 def parse_message(text: str) -> dict:
     d = {}
-
     d["date_raw"] = _extract_value(text, r"Date")
     if d["date_raw"]:
         try:
