@@ -1,7 +1,15 @@
 # db.py
-import psycopg2
-from config import PG_HOST, PG_PORT, PG_DB, PG_USER, PG_PASSWORD, PG_TABLE_BASE
+import pymysql
+from config import (
+    MYSQL_HOST,
+    MYSQL_PORT,
+    MYSQL_DB,
+    MYSQL_USER,
+    MYSQL_PASSWORD,
+    PG_TABLE_BASE,
+)
 
+# Common columns shared by all sheet tables
 COMMON_COLUMNS = [
     "date DATE",
     "address TEXT",
@@ -10,28 +18,29 @@ COMMON_COLUMNS = [
     "sub_category TEXT",
     "brand TEXT",
     "packaging TEXT",
-    "size_ml NUMERIC",
-    "packs INTEGER",
-    "weight_ctn_l NUMERIC",
-    "buy_in NUMERIC",
-    "scheme_base NUMERIC",
-    "foc NUMERIC",
-    "discount_pct NUMERIC",
-    "discount_value NUMERIC",
-    "direct_disc_pct NUMERIC",
-    "direct_disc_value NUMERIC",
-    "net_buy_in NUMERIC",
-    "price_100ml NUMERIC",
-    "mark_up NUMERIC",
-    "sell_out_usd NUMERIC",
-    "exchange_rate NUMERIC",
-    "sell_out_khr NUMERIC",
-    "price_unit_khr NUMERIC",
-    "margin_unit_khr NUMERIC",
-    "price_ctn_khr NUMERIC",
-    "margin_ctn_khr NUMERIC",
+    "size_ml DOUBLE",
+    "packs INT",
+    "weight_ctn_l DOUBLE",
+    "buy_in DOUBLE",
+    "scheme_base DOUBLE",
+    "foc DOUBLE",
+    "discount_pct DOUBLE",
+    "discount_value DOUBLE",
+    "direct_disc_pct DOUBLE",
+    "direct_disc_value DOUBLE",
+    "net_buy_in DOUBLE",
+    "price_100ml DOUBLE",
+    "mark_up DOUBLE",
+    "sell_out_usd DOUBLE",
+    "exchange_rate DOUBLE",
+    "sell_out_khr DOUBLE",
+    "price_unit_khr DOUBLE",
+    "margin_unit_khr DOUBLE",
+    "price_ctn_khr DOUBLE",
+    "margin_ctn_khr DOUBLE",
 ]
 
+# All sheet names used in Excel and DB
 SHEET_NAMES = [
     "Oil",
     "Powder Detergent",
@@ -45,46 +54,49 @@ SHEET_NAMES = [
 ]
 
 def table_name_for_sheet(sheet_name: str) -> str:
+    """Generate table name from base + normalized sheet name."""
     suffix = sheet_name.lower().replace(" ", "_")
     return f"{PG_TABLE_BASE}_{suffix}"
 
 def get_conn():
-    return psycopg2.connect(
-        host=PG_HOST,
-        port=PG_PORT,
-        dbname=PG_DB,
-        user=PG_USER,
-        password=PG_PASSWORD,
+    """Open a MySQL connection."""
+    return pymysql.connect(
+        host=MYSQL_HOST,
+        port=MYSQL_PORT,
+        user=MYSQL_USER,
+        password=MYSQL_PASSWORD,
+        database=MYSQL_DB,
+        cursorclass=pymysql.cursors.Cursor,
     )
 
 def ensure_table(sheet_name: str):
-    """Create table for this sheet if not exists."""
+    """Create table for a sheet if it does not exist."""
     tbl = table_name_for_sheet(sheet_name)
     cols_sql = ",\n    ".join(COMMON_COLUMNS)
     ddl = f"""
     CREATE TABLE IF NOT EXISTS {tbl} (
-        id SERIAL PRIMARY KEY,
+        id INT AUTO_INCREMENT PRIMARY KEY,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         {cols_sql}
-    );
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(ddl)
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(ddl)
+        conn.commit()
+    finally:
+        conn.close()
 
 def init_db():
+    """Ensure all sheet tables exist."""
     for s in SHEET_NAMES:
         ensure_table(s)
 
 def insert_row(sheet_name: str, data: dict):
-    """Insert one row into the table corresponding to sheet_name."""
+    """Insert a single row of data into the sheet's table."""
     ensure_table(sheet_name)
     tbl = table_name_for_sheet(sheet_name)
-    conn = get_conn()
-    cur = conn.cursor()
 
     cols = [
         "date","address","outlet_type","category","sub_category","brand",
@@ -97,14 +109,19 @@ def insert_row(sheet_name: str, data: dict):
     values = [data.get(c) for c in cols]
     placeholders = ",".join(["%s"] * len(cols))
     sql = f"INSERT INTO {tbl} ({','.join(cols)}) VALUES ({placeholders})"
-    cur.execute(sql, values)
-    conn.commit()
-    cur.close()
-    conn.close()
+
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, values)
+        conn.commit()
+    finally:
+        conn.close()
 
 def fetch_all_rows_by_sheet() -> dict:
     """
     Return { sheet_name: [row_dict, ...] } for all known sheets.
+    Used when building the Excel workbook.
     """
     result = {}
     cols = [
@@ -117,18 +134,16 @@ def fetch_all_rows_by_sheet() -> dict:
     ]
 
     conn = get_conn()
-    cur = conn.cursor()
+    try:
+        for sheet in SHEET_NAMES:
+            tbl = table_name_for_sheet(sheet)
+            ensure_table(sheet)
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT {','.join(cols)} FROM {tbl}")
+                rows = cur.fetchall()
+            sheet_rows = [dict(zip(cols, r)) for r in rows]
+            result[sheet] = sheet_rows
+    finally:
+        conn.close()
 
-    for sheet in SHEET_NAMES:
-        tbl = table_name_for_sheet(sheet)
-        ensure_table(sheet)
-        cur.execute(f"SELECT {','.join(cols)} FROM {tbl}")
-        rows = cur.fetchall()
-        sheet_rows = []
-        for r in rows:
-            sheet_rows.append(dict(zip(cols, r)))
-        result[sheet] = sheet_rows
-
-    cur.close()
-    conn.close()
     return result
