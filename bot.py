@@ -16,10 +16,12 @@ from excel_builder import (
     _row_from_data,
     build_excel_from_sheet_dict,
 )
-from db import init_db, insert_row, fetch_all_rows_by_sheet
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# In‑memory storage: {sheet_name: [row_dict, ...]}
+SHEET_ROWS: dict[str, list[dict]] = {}
 
 EXAMPLE_TEXT = (
     "--- product 1 ---\n"
@@ -65,22 +67,27 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         new_count = 0
+        global SHEET_ROWS
+
         for block in blocks:
             parsed = parse_message(block)
             calc = calculate_fields(parsed)
             sheet_name = choose_sheet_name(calc)
-            insert_row(sheet_name, calc)
+
+            SHEET_ROWS.setdefault(sheet_name, [])
+            row_dict = _row_from_data(calc)
+            SHEET_ROWS[sheet_name].append(row_dict)
             new_count += 1
 
-        sheet_rows_raw = fetch_all_rows_by_sheet()
-        sheet_rows = {s: [_row_from_data(r) for r in rows] for s, rows in sheet_rows_raw.items()}
-
-        excel_bytes = build_excel_from_sheet_dict(sheet_rows)
-        total_rows = sum(len(v) for v in sheet_rows.values())
+        excel_bytes = build_excel_from_sheet_dict(SHEET_ROWS)
+        total_rows = sum(len(v) for v in SHEET_ROWS.values())
 
         await update.message.reply_document(
             document=InputFile(excel_bytes, filename="calculation_result.xlsx"),
-            caption=f"Saved {new_count} new product(s). Excel now has {total_rows} product(s) split by style and Outlet-Type (WS/RT)."
+            caption=(
+                f"Saved {new_count} new product(s). "
+                f"Excel now has {total_rows} product(s) split by style and Outlet-Type (WS/RT)."
+            ),
         )
     except Exception as e:
         logger.exception("Error processing message")
@@ -88,7 +95,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------------- Main ----------------
 def main():
-    init_db()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
