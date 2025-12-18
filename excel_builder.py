@@ -5,6 +5,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from config import EXCHANGE_RATE_DEFAULT
 
+
 # ---------------- Sheet selection ----------------
 def choose_sheet_name(data: dict) -> str:
     category = (data.get("category") or "").strip().lower()
@@ -27,6 +28,7 @@ def choose_sheet_name(data: dict) -> str:
         return "Toilet"
     return "Data"
 
+
 # ---------------- Calculations ----------------
 def calculate_fields(data: dict) -> dict:
     buy_in = data.get("buy_in")
@@ -37,17 +39,20 @@ def calculate_fields(data: dict) -> dict:
     direct_disc_pct = data.get("direct_disc_pct")
     direct_disc_value = data.get("direct_disc_value")
     mark_up = data.get("mark_up") or 0
-    sell_out_usd = data.get("sell_out_usd")
+    # no longer read sell_out_usd from input
     size_ml = data.get("size_ml") or 0
     packs = data.get("packs") or 1
     price_unit_khr = data.get("price_unit_khr")
-    exchange_rate = data.get("exchange_rate") or EXCHANGE_RATE_DEFAULT
+
+    # Always use default exchange rate for calculation
+    exchange_rate = EXCHANGE_RATE_DEFAULT
 
     if buy_in is None:
         raise ValueError("Buy-in is required")
     if price_unit_khr is None:
         raise ValueError("Price Unit (KHR) is required")
 
+    # Discount %
     if scheme and foc and (scheme + foc) != 0:
         discount_pct = (foc / (scheme + foc)) * 100.0
     else:
@@ -58,12 +63,18 @@ def calculate_fields(data: dict) -> dict:
     direct_disc_value = (direct_disc_pct / 100.0) * buy_in
     net_buy_in = buy_in - (discount_value + direct_disc_value)
 
+    # Total ml and price per 100 ml
     total_unit = size_ml * packs if size_ml and packs else 0
     price_100ml = net_buy_in / (total_unit / 100.0) if total_unit else None
 
-    if not sell_out_usd:
-        sell_out_usd = net_buy_in + mark_up
+    # Sell-out ($) is always calculated: Net Buy-in + Mark-up
+    sell_out_usd = net_buy_in + mark_up
+
+    # Convert to KHR
     sell_out_khr = sell_out_usd * exchange_rate
+
+    # Weight per Ctn (L) is calculated: (Size * Packs) / 1000
+    weight_ctn_l = (size_ml * packs) / 1000 if size_ml and packs else None
 
     margin_unit_khr = price_unit_khr - (sell_out_khr / packs)
     price_ctn_khr = price_unit_khr * packs
@@ -80,11 +91,13 @@ def calculate_fields(data: dict) -> dict:
         sell_out_usd=round(sell_out_usd, 4),
         exchange_rate=exchange_rate,
         sell_out_khr=round(sell_out_khr, 2),
+        weight_ctn_l=round(weight_ctn_l, 3) if weight_ctn_l is not None else None,
         margin_unit_khr=round(margin_unit_khr, 2),
         price_ctn_khr=round(price_ctn_khr, 2),
         margin_ctn_khr=round(margin_ctn_khr, 2),
     )
     return result
+
 
 # ---------------- Row mapping ----------------
 def _fmt(value, unit: str | None = None):
@@ -93,6 +106,7 @@ def _fmt(value, unit: str | None = None):
     if unit:
         return f"{value} {unit}"
     return value
+
 
 def _row_from_data(data: dict) -> dict:
     return {
@@ -123,6 +137,7 @@ def _row_from_data(data: dict) -> dict:
         "Price Ctn (KHR)": _fmt(data.get("price_ctn_khr"), "KHR"),
         "Margin/Ctn (KHR)": _fmt(data.get("margin_ctn_khr"), "KHR"),
     }
+
 
 # ---------------- Excel builder ----------------
 def build_excel_from_sheet_dict(sheet_rows: dict) -> bytes:

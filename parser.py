@@ -24,7 +24,7 @@ def parse_message(text: str) -> dict:
     else:
         d["date"] = None
 
-    d["address"] = _extract_value(text, r"Addresss|Address")
+    d["address"] = _extract_value(text, r"Address|Address")
     d["outlet_type"] = _extract_value(text, r"Outlet-Type")
     d["category"] = _extract_value(text, r"Category")
     d["sub_category"] = _extract_value(text, r"Sub-Category")
