@@ -57,6 +57,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return
+
     text = update.message.text
     try:
         parts = text.split('---')
@@ -97,7 +100,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    # Track ALL text messages (not excluding commands)
+    app.add_handler(MessageHandler(filters.TEXT, handle_text))
+
     app.run_polling()
 
 if __name__ == "__main__":
