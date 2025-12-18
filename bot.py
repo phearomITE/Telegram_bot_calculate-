@@ -61,14 +61,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = update.message.text
+    logger.info("User %s sent: %s", update.effective_user.id, text)
+
+    # Simple greeting example
+    if text.lower().strip() in {"hi", "hello", "hey"}:
+        await update.message.reply_text(
+            "Hi! Send product data in the template format shown in /start."
+        )
+        return
+
+    # Try to detect product blocks
+    parts = text.split('---')
+    blocks = [b for b in parts if 'Date:' in b]
+
+    # If the message is not in product format, just ignore silently
+    # (no 'No valid product data found' message)
+    if not blocks:
+        return
+
     try:
-        parts = text.split('---')
-        blocks = [b for b in parts if 'Date:' in b]
-
-        if not blocks:
-            await update.message.reply_text("No valid product data found.")
-            return
-
         new_count = 0
         global SHEET_ROWS
 
@@ -101,7 +112,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
 
-    # Track ALL text messages (not excluding commands)
+    # Track all text messages
     app.add_handler(MessageHandler(filters.TEXT, handle_text))
 
     app.run_polling()
