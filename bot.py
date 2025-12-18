@@ -64,7 +64,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("User %s sent: %s", update.effective_user.id, text)
 
     # Simple greeting example
-    if text.lower().strip() in {"hi", "hello", "hey"}:
+    if text.lower().strip() in {"hi", "hello", "hey", "/hi", "/hello", "/hey"}:
         await update.message.reply_text(
             "Hi! Send product data in the template format shown in /start."
         )
