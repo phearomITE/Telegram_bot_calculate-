@@ -76,7 +76,7 @@ def choose_sheet_name(data: dict) -> str:
         "dishwash", "dish wash", "dishwashing liquid",
         "washing liquid", "dishwashing"
     }
-    if category in dishwash_keywords and sub_cat not in {"eco", "eco-friendly"}:
+    if category in dishwash_keywords and sub_cat not in {"eco", "eco-friendly" ,"dishwash" ,"Dishwash"}:
         return "Dishwash"
 
     # Fabric Softener
@@ -93,7 +93,7 @@ def choose_sheet_name(data: dict) -> str:
         "biodegradable dishwash", "green dishwash"
     }
     if category in eco_keywords or (
-        category in dishwash_keywords and sub_cat in {"eco", "eco-friendly"}
+        category in dishwash_keywords and sub_cat in {"eco", "eco-friendly", "Eco dishwash" ,"Eco-dishwash"}
     ):
         return "Eco Dishwash"
 
