@@ -1,6 +1,7 @@
 import re
 from dateutil import parser as dateparser
 
+
 def _extract_value(text, key_pattern):
     pattern = rf"^\s*({key_pattern})\s*:\s*(.*)$"
     for line in text.splitlines():
@@ -13,8 +14,11 @@ def _extract_value(text, key_pattern):
             return value if value != "" else None
     return None
 
+
 def parse_message(text: str) -> dict:
     d = {}
+
+    # Date
     d["date_raw"] = _extract_value(text, r"Date")
     if d["date_raw"]:
         try:
@@ -24,7 +28,9 @@ def parse_message(text: str) -> dict:
     else:
         d["date"] = None
 
-    d["address"] = _extract_value(text, r"Address|Address")
+    # Address / Addresss
+    d["address"] = _extract_value(text, r"Addresss|Address")
+
     d["outlet_type"] = _extract_value(text, r"Outlet-Type")
     d["category"] = _extract_value(text, r"Category")
     d["sub_category"] = _extract_value(text, r"Sub-Category")
@@ -68,7 +74,7 @@ def parse_message(text: str) -> dict:
     price_unit_raw = _extract_value(text, r"Price Unit")
     d["price_unit_khr"] = num_or_none(price_unit_raw)
 
-    ex_rate_raw = _extract_value(text, r"Exchange Rate")
-    d["exchange_rate"] = num_or_none(ex_rate_raw)
+    # Exchange rate always default in calculations
+    d["exchange_rate"] = None
 
     return d

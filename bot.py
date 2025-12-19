@@ -37,13 +37,11 @@ EXAMPLE_TEXT = (
     "Buy-in: 15.90$    # ត្រូវតែបំពេញ\n"
     "Scheme(base): 4   # ត្រូវតែបំពេញ\n"
     "FOC: 1\n"
-    "Discount(%): 0    # បំពេញក៏បាន អត់ក៏បាន\n"
-    "Discount($): 0    # បំពេញក៏បាន អត់ក៏បាន\n"
     "Direct Disc.(%): 0    # បំពេញក៏បាន អត់ក៏បាន\n"
-    "Direct Disc($): 0     # បំពេញក៏បាន អត់ក៏បាន\n"
     "Mark - up: 0.5    # ត្រូវតែបំពេញ\n"
     "Price Unit: 1000  # ត្រូវតែបំពេញ\n"
 )
+
 
 # ---------------- Handlers ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,6 +51,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Example:\n\n" + EXAMPLE_TEXT
     )
 
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -60,19 +59,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     logger.info("User %s sent: %s", update.effective_user.id, text)
 
-    # Simple greeting example
     if text.lower().strip() in {"hi", "hello", "hey", "/hi", "/hello", "/hey"}:
         await update.message.reply_text(
             "Hi! Send product data in the template format shown in /start."
         )
         return
 
-    # Try to detect product blocks
     parts = text.split('---')
     blocks = [b for b in parts if 'Date:' in b]
 
-    # If the message is not in product format, just ignore silently
-    # (no 'No valid product data found' message)
     if not blocks:
         return
 
@@ -104,15 +99,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("Error processing message")
         await update.message.reply_text(f"Error: {e}")
 
+
 # ---------------- Main ----------------
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-
-    # Track all text messages
     app.add_handler(MessageHandler(filters.TEXT, handle_text))
-
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()

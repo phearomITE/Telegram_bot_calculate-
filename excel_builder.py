@@ -1,4 +1,6 @@
 import io
+from decimal import Decimal, ROUND_FLOOR
+
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -6,128 +8,274 @@ from openpyxl.utils import get_column_letter
 from config import EXCHANGE_RATE_DEFAULT
 
 
-# ---------------- Sheet selection ----------------
+# ---------- rounding helper: 6–9 up, 1–5 down, always 2 decimals ----------
+def round2(x):
+    if x is None:
+        return None
+
+    d = Decimal(str(x))
+
+    scaled = (d * 1000).quantize(Decimal("1"), rounding=ROUND_FLOOR)
+    third = int(scaled % 10)
+
+    if third >= 6:
+        q = Decimal("0.01")
+        d2 = (-d).quantize(q, rounding=ROUND_FLOOR)
+        d2 = -d2
+    else:
+        d2 = d.quantize(Decimal("0.01"), rounding=ROUND_FLOOR)
+
+    return f"{d2:.2f}"
+
+
+def size_is_gram(data: dict) -> bool:
+    raw = (data.get("size_raw") or "").lower()
+    return "g" in raw and "ml" not in raw
+
+
+def size_is_ml(data: dict) -> bool:
+    raw = (data.get("size_raw") or "").lower()
+    return "ml" in raw
+
+
 def choose_sheet_name(data: dict) -> str:
+    """
+    Map category + sub_category to sheet names with many allowed user inputs.
+    """
     category = (data.get("category") or "").strip().lower()
     sub_cat = (data.get("sub_category") or "").strip().lower()
-    if category in ("cooking oil", "oil"):
+
+    # Oil
+    oil_keywords = {
+        "cooking oil", "oil", "palm oil", "vegetable oil",
+        "coconut oil", "sunflower oil"
+    }
+    if category in oil_keywords:
         return "Oil"
-    if category == "detergent" and sub_cat == "powder":
+
+    # Powder Detergent
+    if category in {"detergent", "powder detergent", "washing powder"} and \
+       sub_cat in {"powder", "powdered", "dry", ""}:
         return "Powder Detergent"
-    if category == "detergent" and sub_cat == "liquid":
+
+    # Liquid Detergent
+    if category in {"detergent", "liquid detergent", "laundry liquid"} and \
+       sub_cat in {"liquid", "fluid", ""}:
         return "Liquid Detergent"
-    if category == "milk":
+
+    # Milk
+    milk_keywords = {
+        "milk", "dairy milk", "fresh milk",
+        "evaporated milk", "condensed milk", "uht milk"
+    }
+    if category in milk_keywords:
         return "Milk"
-    if category == "dishwash":
+
+    # Dishwash (non‑eco)
+    dishwash_keywords = {
+        "dishwash", "dish wash", "dishwashing liquid",
+        "washing liquid", "dishwashing"
+    }
+    if category in dishwash_keywords and sub_cat not in {"eco", "eco-friendly"}:
         return "Dishwash"
-    if category == "fabric softener":
+
+    # Fabric Softener
+    fabric_keywords = {
+        "fabric softener", "fabric conditioner", "softener",
+        "conditioner", "fabric softner"
+    }
+    if category in fabric_keywords:
         return "Fabric Softener"
-    if category == "eco dishwash":
+
+    # Eco Dishwash
+    eco_keywords = {
+        "eco dishwash", "eco dishwashing", "eco-dishwash",
+        "biodegradable dishwash", "green dishwash"
+    }
+    if category in eco_keywords or (
+        category in dishwash_keywords and sub_cat in {"eco", "eco-friendly"}
+    ):
         return "Eco Dishwash"
-    if category == "toilet":
+
+    # Toilet
+    toilet_keywords = {
+        "toilet", "toilet cleaner", "toilet bowl cleaner",
+        "wc cleaner", "toilet liquid"
+    }
+    if category in toilet_keywords:
         return "Toilet"
+
+    # Fallback
     return "Data"
 
 
-# ---------------- Calculations ----------------
 def calculate_fields(data: dict) -> dict:
     buy_in = data.get("buy_in")
     scheme = data.get("scheme_base")
     foc = data.get("foc")
-    discount_pct = data.get("discount_pct")
-    discount_value = data.get("discount_value")
-    direct_disc_pct = data.get("direct_disc_pct")
-    direct_disc_value = data.get("direct_disc_value")
+    direct_disc_pct_input = data.get("direct_disc_pct")
     mark_up = data.get("mark_up") or 0
-    # no longer read sell_out_usd from input
-    size_ml = data.get("size_ml") or 0
+    size_val = data.get("size_ml") or 0
     packs = data.get("packs") or 1
-    price_unit_khr = data.get("price_unit_khr")
+    price_unit_khr_input = data.get("price_unit_khr")
 
-    # Always use default exchange rate for calculation
     exchange_rate = EXCHANGE_RATE_DEFAULT
 
     if buy_in is None:
         raise ValueError("Buy-in is required")
-    if price_unit_khr is None:
+    if price_unit_khr_input is None:
         raise ValueError("Price Unit (KHR) is required")
 
-    # Discount %
+    # Discount(%) and Discount($) from Scheme & FOC
     if scheme and foc and (scheme + foc) != 0:
-        discount_pct = (foc / (scheme + foc)) * 100.0
+        discount_pct_val = (foc / (scheme + foc)) * 100.0
     else:
-        discount_pct = discount_pct or 0
+        discount_pct_val = 0.0
 
-    discount_value = (discount_pct / 100.0) * buy_in
-    direct_disc_pct = direct_disc_pct or 0
-    direct_disc_value = (direct_disc_pct / 100.0) * buy_in
-    net_buy_in = buy_in - (discount_value + direct_disc_value)
+    discount_value_val = (discount_pct_val / 100.0) * buy_in
 
-    # Total ml and price per 100 ml
-    total_unit = size_ml * packs if size_ml and packs else 0
-    price_100ml = net_buy_in / (total_unit / 100.0) if total_unit else None
+    # Direct Disc($) from Direct Disc(%)
+    direct_disc_pct_val = direct_disc_pct_input or 0.0
+    direct_disc_value_val = (direct_disc_pct_val / 100.0) * buy_in
 
-    # Sell-out ($) is always calculated: Net Buy-in + Mark-up
-    sell_out_usd = net_buy_in + mark_up
+    net_buy_in_val = buy_in - (discount_value_val + direct_disc_value_val)
 
-    # Convert to KHR
-    sell_out_khr = sell_out_usd * exchange_rate
+    # size‑based
+    total_size = size_val * packs if size_val and packs else 0
+    price_100_unit_val = (
+        net_buy_in_val / (total_size / 100.0) if total_size else None
+    )
 
-    # Weight per Ctn (L) is calculated: (Size * Packs) / 1000
-    weight_ctn_l = (size_ml * packs) / 1000 if size_ml and packs else None
+    # Weight per Ctn raw in kg/L, then integer (no decimal)
+    weight_ctn_base_raw = (total_size / 1000.0) if total_size else None
+    if weight_ctn_base_raw is not None:
+        weight_ctn_int = int(round(weight_ctn_base_raw))
+        weight_ctn_base = str(weight_ctn_int)
+    else:
+        weight_ctn_base = None
 
-    margin_unit_khr = price_unit_khr - (sell_out_khr / packs)
-    price_ctn_khr = price_unit_khr * packs
-    margin_ctn_khr = price_ctn_khr - sell_out_khr
+    sell_out_usd_val = net_buy_in_val + mark_up
+
+    # KHR as integers
+    sell_out_khr_val = sell_out_usd_val * exchange_rate
+    sell_out_khr_int = int(round(sell_out_khr_val))
+
+    price_unit_khr_int = int(round(price_unit_khr_input))
+    margin_unit_khr_val = price_unit_khr_int - (sell_out_khr_int / packs)
+    price_ctn_khr_val = price_unit_khr_int * packs
+    margin_ctn_khr_val = price_ctn_khr_val - sell_out_khr_int
 
     result = dict(data)
     result.update(
-        discount_pct=round(discount_pct, 4),
-        discount_value=round(discount_value, 4),
-        direct_disc_pct=round(direct_disc_pct, 4),
-        direct_disc_value=round(direct_disc_value, 4),
-        net_buy_in=round(net_buy_in, 4),
-        price_100ml=round(price_100ml, 4) if price_100ml is not None else None,
-        sell_out_usd=round(sell_out_usd, 4),
-        exchange_rate=exchange_rate,
-        sell_out_khr=round(sell_out_khr, 2),
-        weight_ctn_l=round(weight_ctn_l, 3) if weight_ctn_l is not None else None,
-        margin_unit_khr=round(margin_unit_khr, 2),
-        price_ctn_khr=round(price_ctn_khr, 2),
-        margin_ctn_khr=round(margin_ctn_khr, 2),
+        size_ml=str(int(round(size_val))) if size_val is not None else None,
+        buy_in=round2(buy_in),
+        discount_pct=round2(discount_pct_val),
+        discount_value=round2(discount_value_val),
+        direct_disc_pct=round2(direct_disc_pct_val),
+        direct_disc_value=round2(direct_disc_value_val),
+        net_buy_in=round2(net_buy_in_val),
+        price_100ml=(
+            round2(price_100_unit_val)
+            if price_100_unit_val is not None
+            else None
+        ),
+        mark_up=round2(mark_up),
+        sell_out_usd=round2(sell_out_usd_val),
+        exchange_rate=f"KHR {exchange_rate}",
+        sell_out_khr=str(sell_out_khr_int),
+        price_unit_khr=str(price_unit_khr_int),
+        margin_unit_khr=str(int(round(margin_unit_khr_val))),
+        price_ctn_khr=str(int(round(price_ctn_khr_val))),
+        margin_ctn_khr=str(int(round(margin_ctn_khr_val))),
+        weight_ctn_l=weight_ctn_base,
     )
     return result
 
 
-# ---------------- Row mapping ----------------
 def _fmt(value, unit: str | None = None):
     if value is None:
         return None
     if unit:
-        return f"{value} {unit}"
+        # for money, keep unit first: KHR 92,000 ; $ 13.80
+        return f"{unit} {value}"
     return value
 
 
 def _row_from_data(data: dict) -> dict:
-    return {
+    if size_is_gram(data):
+        size_unit = "g"
+        weight_unit = "kg"
+        price_header = "Price / 100g"
+    elif size_is_ml(data):
+        size_unit = "ml"
+        weight_unit = "L"
+        price_header = "Price / 100ml"
+    else:
+        size_unit = ""
+        weight_unit = ""
+        price_header = "Price / 100 unit"
+
+    # ----- value then unit for 4 columns -----
+    # Size  -> "230 ml" / "400 g"
+    size_val_raw = data.get("size_ml")
+    if size_val_raw is not None:
+        try:
+            size_num = int(float(size_val_raw))
+        except (TypeError, ValueError):
+            size_num = size_val_raw
+        size_display = f"{size_num} {size_unit}".strip()
+    else:
+        size_display = None
+
+    # Weight per Ctn -> "11 L" / "10 kg"
+    weight_val_raw = data.get("weight_ctn_l")
+    if weight_val_raw is not None:
+        weight_display = f"{weight_val_raw} {weight_unit}".strip()
+    else:
+        weight_display = None
+
+    # Discount(%) -> "10.00%"
+    disc_pct_raw = data.get("discount_pct")
+    disc_pct_display = f"{disc_pct_raw}%" if disc_pct_raw is not None else None
+
+    # Direct Disc.(%) -> "5.00%"
+    direct_disc_pct_raw = data.get("direct_disc_pct")
+    direct_disc_pct_display = (
+        f"{direct_disc_pct_raw}%" if direct_disc_pct_raw is not None else None
+    )
+    # ----------------------------------------
+
+    row = {
         "Date": data.get("date"),
         "Address": data.get("address"),
         "Category": data.get("category"),
         "Sub-Category": data.get("sub_category"),
         "Brand": data.get("brand"),
         "Packaging": data.get("packaging"),
-        "Size": _fmt(data.get("size_ml"), "ml"),
+
+        # 1) Size (value then unit)
+        "Size": size_display,
         "Packs": data.get("packs"),
-        "Weight per Ctn": _fmt(data.get("weight_ctn_l"), "L"),
+
+        # 2) Weight per Ctn (value then unit)
+        "Weight per Ctn": weight_display,
+
         "Buy-in": _fmt(data.get("buy_in"), "$"),
         "Scheme(base)": data.get("scheme_base"),
         "FOC": data.get("foc"),
-        "Discount(%)": _fmt(data.get("discount_pct"), "%"),
+
+        # 3) Discount(%) (value then %)
+        "Discount(%)": disc_pct_display,
+
         "Discount($)": _fmt(data.get("discount_value"), "$"),
-        "Direct Disc.(%)": _fmt(data.get("direct_disc_pct"), "%"),
+
+        # 4) Direct Disc.(%) (value then %)
+        "Direct Disc.(%)": direct_disc_pct_display,
+
         "Direct Disc($)": _fmt(data.get("direct_disc_value"), "$"),
         "Net Buy-in": _fmt(data.get("net_buy_in"), "$"),
-        "Price / 100ml": _fmt(data.get("price_100ml"), "$"),
+        "Price / 100 unit": _fmt(data.get("price_100ml"), "$"),
+        "PriceHeader": price_header,
         "Mark - up": _fmt(data.get("mark_up"), "$"),
         "Sell Out ($)": _fmt(data.get("sell_out_usd"), "$"),
         "Exchange Rate": data.get("exchange_rate"),
@@ -137,9 +285,9 @@ def _row_from_data(data: dict) -> dict:
         "Price Ctn (KHR)": _fmt(data.get("price_ctn_khr"), "KHR"),
         "Margin/Ctn (KHR)": _fmt(data.get("margin_ctn_khr"), "KHR"),
     }
+    return row
 
 
-# ---------------- Excel builder ----------------
 def build_excel_from_sheet_dict(sheet_rows: dict) -> bytes:
     wb = Workbook()
     wb.remove(wb.active)
@@ -150,7 +298,6 @@ def build_excel_from_sheet_dict(sheet_rows: dict) -> bytes:
 
         ws = wb.create_sheet(title=sheet_name)
 
-        # Row 1: colored section headers
         section_headers = [
             ("A", "I", "PRODUCT INFO", "FF105437"),
             ("J", "R", "WHOLESALE BUY-IN", "FF0070C0"),
@@ -165,12 +312,11 @@ def build_excel_from_sheet_dict(sheet_rows: dict) -> bytes:
             cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        # Row 2: headers
         headers = [
             "Date", "Address", "Category", "Sub-Category", "Brand", "Packaging",
             "Size", "Packs", "Weight per Ctn",
             "Buy-in", "Scheme(base)", "FOC", "Discount(%)", "Discount($)",
-            "Direct Disc.(%)", "Direct Disc($)", "Net Buy-in", "Price / 100ml",
+            "Direct Disc.(%)", "Direct Disc($)", "Net Buy-in", "Price / 100 unit",
             "Mark - up", "Sell Out ($)", "Exchange Rate", "Sell Out (KHR)",
             "Price Unit (KHR)", "Margin/Unit (KHR)", "Price Ctn (KHR)", "Margin/Ctn (KHR)",
         ]
@@ -187,15 +333,28 @@ def build_excel_from_sheet_dict(sheet_rows: dict) -> bytes:
                 bottom=Side(style="thin"),
             )
 
-        # Data rows
         df = pd.DataFrame(rows)
         if "Date" in df.columns:
             df = df.sort_values(by=["Date"], ascending=True, na_position="last")
 
+        price_col_idx = headers.index("Price / 100 unit") + 1
+
         for row_idx, (_, row_data) in enumerate(df.iterrows(), start=3):
+            price_header = row_data.get("PriceHeader")
+            if price_header and ws.cell(row=2, column=price_col_idx).value != price_header:
+                ws.cell(row=2, column=price_col_idx).value = price_header
+
             for col_idx, header in enumerate(headers, start=1):
                 cell = ws.cell(row=row_idx, column=col_idx)
-                cell.value = row_data.get(header)
+                value = row_data.get(header)
+
+                # force 4 columns to be plain strings (value then unit)
+                if header in ["Size", "Weight per Ctn", "Discount(%)", "Direct Disc.(%)"]:
+                    cell.value = "" if value is None else str(value)
+                    cell.number_format = "General"
+                else:
+                    cell.value = value
+
                 cell.alignment = Alignment(horizontal="right", vertical="center")
                 cell.border = Border(
                     left=Side(style="thin"),
