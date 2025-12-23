@@ -129,19 +129,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Direct Disc.(%): 12.00%\n"
         "Mark - up: 1.00$\n"
         "Price Unit: 22000\n\n"
-        "Main formulas (inside Excel):\n"
-        "• Weight per Ctn = (Size × Packs) / 1000 (kg or L).\n"
-        "• Discount(%) = FOC / (Scheme(base) + FOC).\n"
-        "• Discount($) = Discount(%) × Buy-in.\n"
-        "• Direct Disc($) = Direct Disc(%) × Buy-in.\n"
-        "• Net Buy-in = Buy-in − (Discount($) + Direct Disc($)).\n"
-        "• Price / 100g or 100ml uses Size scale.\n"
-        "• Sell Out($) = Net Buy-in + Mark-up.\n"
-        "• Sell Out(KHR), Margin/Unit, Price Ctn, Margin/Ctn are calculated from "
-        "Sell Out($), Packs, and Price Unit.\n\n"
-        "Rounding:\n"
-        "All calculated values use your rule: look at 3rd decimal; 6–9 round up, "
-        "1–5 round down, keep 2 decimals."
     )
     await update.message.reply_text(text, reply_markup=main_menu_keyboard())
 
