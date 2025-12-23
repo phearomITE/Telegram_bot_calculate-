@@ -48,7 +48,7 @@ EXAMPLE_TEXT = (
     "Buy-in: 22.50$                 # ត្រូវតែបំពេញ\n"
     "Scheme(base): 4\n"
     "FOC: 0\n"
-    "Direct Disc.(%): 0.00%          # បំពេញក៏បាន អត់ក៏បាន\n"
+    "Direct Disc.(%): 0.0%          # បំពេញក៏បាន អត់ក៏បាន\n"
     "Mark - up: 0.50$               # ត្រូវតែបំពេញ\n"
     "Price Unit: 9000               # ត្រូវតែបំពេញ\n"
     "\n"
@@ -64,7 +64,7 @@ EXAMPLE_TEXT = (
     "Buy-in: 28.60$                 # ត្រូវតែបំពេញ\n"
     "Scheme(base): 1\n"
     "FOC: 0\n"
-    "Direct Disc.(%): 0.00%          # បំពេញក៏បាន អត់ក៏បាន\n"
+    "Direct Disc.(%): 0.0%          # បំពេញក៏បាន អត់ក៏បាន\n"
     "Mark - up: 1.00$               # ត្រូវតែបំពេញ\n"
     "Price Unit: 3000               # ត្រូវតែបំពេញ\n"
 )
@@ -77,7 +77,7 @@ def normalize_sheet(name: str) -> str:
 
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
-        [KeyboardButton("🆕 New calculation")],
+        [KeyboardButton("🆕 New calculation (/start)")],
         [KeyboardButton("📄 Show products (/list)")],
         [
             KeyboardButton("ℹ️ Help (/help)"),
@@ -270,6 +270,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("User %s sent: %s", update.effective_user.id, text)
 
     lower = text.lower().strip()
+    # /start button shortcut
+    if "new calculation" in lower:
+        await start(update, context)
+        return
     # greetings
     if lower in {"hi", "hello", "hey", "/hi", "/hello", "/hey"}:
         await update.message.reply_text(
@@ -346,7 +350,6 @@ async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # group parsed rows by sheet, then sort by date inside each sheet
     grouped: dict[str, list[dict]] = {}
     for parsed in ALL_PRODUCTS:
         calc = calculate_fields(parsed)
@@ -401,7 +404,6 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     sheet_key = normalize_sheet(sheet_name_input)
 
-    # build per-sheet sorted list with global indexes (like _build_index_by_sheet)
     items = []
     for idx, parsed in enumerate(ALL_PRODUCTS):
         calc = calculate_fields(parsed)
