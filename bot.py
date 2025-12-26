@@ -187,7 +187,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📦 Price Calculator Bot v1.0\n"
+        "📦 Price Calculator Bot v2.0\n"
         "For sales / pricing calculations of WS/RT items.\n"
         "• Parses text to Excel rows\n"
         "• Calculates Net Buy-in, Sell Out, margins with custom rounding\n"
