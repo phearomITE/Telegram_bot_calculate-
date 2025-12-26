@@ -119,13 +119,13 @@ def choose_sheet_name(data: dict) -> str:
 
     if (
         category in {"detergent", "powder detergent", "washing powder"}
-        and sub_cat in {"powder", "powdered", "dry", ""}
+        and sub_cat in {"powder", "powdered", "Powder", ""}
     ):
         return "Powder Detergent"
 
     if (
         category in {"detergent", "liquid detergent", "laundry liquid"}
-        and sub_cat in {"liquid", "fluid", ""}
+        and sub_cat in {"liquid", "Liquid", ""}
     ):
         return "Liquid Detergent"
 
@@ -135,7 +135,7 @@ def choose_sheet_name(data: dict) -> str:
         "fresh milk",
         "evaporated milk",
         "condensed milk",
-        "uht milk",
+        "Milk",
     }
     if category in milk_keywords:
         return "Milk"
