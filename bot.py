@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 
+
 from telegram import (
     Update,
     InputFile,
@@ -15,6 +16,7 @@ from telegram.ext import (
     filters,
 )
 
+
 from config import BOT_TOKEN, EXCHANGE_RATE_DEFAULT
 from parser import parse_message
 from excel_builder import (
@@ -24,16 +26,20 @@ from excel_builder import (
     build_excel_from_sheet_dict,
 )
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 # per-sheet rows for Excel (rebuilt from ALL_PRODUCTS)
 SHEET_ROWS: dict[str, list[dict]] = {}
 # flat list of all parsed products in input order
 ALL_PRODUCTS: list[dict] = []
 
+
 # per-user settings (simple in‑memory example)
 USER_SETTINGS: dict[int, dict] = {}
+
 
 EXAMPLE_TEXT = (
     "--- product 1 ---\n"
@@ -70,9 +76,11 @@ EXAMPLE_TEXT = (
 )
 
 
+
 def normalize_sheet(name: str) -> str:
     """Lowercase + strip for robust sheet comparison."""
     return (name or "").strip().lower()
+
 
 
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
@@ -91,6 +99,7 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome to Price Calculator Bot.\n\n"
@@ -102,6 +111,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "📘 Help – Price Calculator Bot\n\n"
@@ -111,8 +121,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/settings – Change language, default exchange rate, default outlet type, etc.\n"
         "/about – Show bot information.\n"
         "/list – Show all products grouped by sheet, Id per sheet.\n"
-        "/delete <Sheet> <Id> – Delete one row from a sheet.\n"
-        "/delete_sheet <Sheet> – Delete all rows from a sheet.\n"
+        "/delete <Sheet> <Id> – Delete one row from a sheet (Ex: /delete Powder detergent 1).\n"
+        "/delete_sheet <Sheet> – Delete all rows from a sheet (Ex: /delete_sheet Oil).\n"
         "/summary – Show count of products per sheet.\n\n"
         "Input format (one product):\n"
         "Date: 24.11.2025\n"
@@ -133,6 +143,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, reply_markup=main_menu_keyboard())
 
 
+
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Very simple /settings: show and allow basic changes with arguments."""
     user_id = update.effective_user.id
@@ -145,6 +156,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "rounding_mode": "custom",  # your 3rd-decimal rule
         },
     )
+
 
     # If user sends arguments, allow quick updates, e.g.
     # /settings outlet=RT rate=4100 lang=en
@@ -159,6 +171,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif arg.startswith("lang="):
             settings["language"] = arg.split("=", 1)[1].lower()
 
+
     await update.message.reply_text(
         "⚙️ Settings:\n"
         f"Language: {settings['language']}\n"
@@ -169,6 +182,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/settings outlet=RT rate=4100 lang=en",
         reply_markup=main_menu_keyboard(),
     )
+
 
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -183,6 +197,7 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+
 def _rebuild_sheet_rows() -> dict[str, list[dict]]:
     """Rebuild SHEET_ROWS from ALL_PRODUCTS (used after delete)."""
     sheet_rows: dict[str, list[dict]] = {}
@@ -193,6 +208,7 @@ def _rebuild_sheet_rows() -> dict[str, list[dict]]:
         row_dict = _row_from_data(calc)
         sheet_rows[sheet_name].append(row_dict)
     return sheet_rows
+
 
 
 def _build_index_by_sheet() -> dict[str, list[tuple[int, int]]]:
@@ -206,13 +222,16 @@ def _build_index_by_sheet() -> dict[str, list[tuple[int, int]]]:
         sheet_name = choose_sheet_name(calc)
         items.append((idx, sheet_name, calc))
 
+
     by_sheet: defaultdict[str, list[tuple[int, dict]]] = defaultdict(list)
     for global_idx, sheet_name, calc in items:
         by_sheet[normalize_sheet(sheet_name)].append((global_idx, calc))
 
+
     # sort each sheet by Date
     for sheet_name in by_sheet:
         by_sheet[sheet_name].sort(key=lambda t: t[1].get("date") or "")
+
 
     index_map: dict[str, list[tuple[int, int]]] = {}
     for sheet_name, rows in by_sheet.items():
@@ -221,6 +240,7 @@ def _build_index_by_sheet() -> dict[str, list[tuple[int, int]]]:
         ]
     logger.info("Sheets in index_map: %s", list(index_map.keys()))
     return index_map
+
 
 
 async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -232,14 +252,17 @@ async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+
     counts: dict[str, int] = {}
     for parsed in ALL_PRODUCTS:
         calc = calculate_fields(parsed)
         sheet = choose_sheet_name(calc)
         counts[sheet] = counts.get(sheet, 0) + 1
 
+
     total = sum(counts.values())
     lines = [f"• {sheet}: {count} product(s)" for sheet, count in counts.items()]
+
 
     await update.message.reply_text(
         "📊 Summary – products per sheet:\n\n"
@@ -249,12 +272,15 @@ async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
 
+
     text = update.message.text
     logger.info("User %s sent: %s", update.effective_user.id, text)
+
 
     lower = text.lower().strip()
     # /start button shortcut
@@ -285,24 +311,31 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await summary_command(update, context)
         return
 
+
     parts = text.split("---")
     blocks = [b for b in parts if "Date:" in b]
+
 
     if not blocks:
         return
 
+
     try:
         global SHEET_ROWS, ALL_PRODUCTS
+
 
         for block in blocks:
             parsed = parse_message(block)
             ALL_PRODUCTS.append(parsed)
 
+
         SHEET_ROWS = _rebuild_sheet_rows()
         new_count = len(blocks)
 
+
         excel_bytes = build_excel_from_sheet_dict(SHEET_ROWS)
         total_rows = sum(len(v) for v in SHEET_ROWS.values())
+
 
         await update.message.reply_document(
             document=InputFile(excel_bytes, filename="calculation_result.xlsx"),
@@ -318,6 +351,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception("Error processing message")
         await update.message.reply_text(f"Error: {e}")
+
 
 
 async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -337,14 +371,17 @@ async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+
     grouped: dict[str, list[dict]] = {}
     for parsed in ALL_PRODUCTS:
         calc = calculate_fields(parsed)
         sheet = choose_sheet_name(calc)
         grouped.setdefault(sheet, []).append(parsed)
 
+
     for sheet in grouped:
         grouped[sheet].sort(key=lambda p: p.get("date") or "")
+
 
     lines: list[str] = [
         "Current products\n[Sheet]\n(Id – Date | Category | Brand):\n"
@@ -358,38 +395,45 @@ async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"{i}. {date} | {cat} | {brand}")
         lines.append("")
 
+
     await update.message.reply_text(
         "\n".join(lines),
         reply_markup=main_menu_keyboard(),
     )
 
 
+
 async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
+    UPDATED: Handles multi-word sheet names and case-insensitivity.
     /delete <SheetName> <Id>
-    Id = row number inside that sheet after sorting by Date.
-    Example: /delete Milk 2
+    Example: /delete Powder detergent 1
     """
     if len(context.args) < 2:
         await update.message.reply_text(
-            "Usage: /delete <SheetName> <Id>\nExample: /delete Milk 2",
+            "Usage: /delete <SheetName> <Id>\nExample: /delete Powder detergent 1",
             reply_markup=main_menu_keyboard(),
         )
         return
+
 
     global ALL_PRODUCTS, SHEET_ROWS
 
-    sheet_name_input = context.args[0]
+
+    # Treat all args except the last one as the sheet name (supports spaces)
+    sheet_name_input = " ".join(context.args[:-1]).strip()
     try:
-        sheet_row_id = int(context.args[1])
+        sheet_row_id = int(context.args[-1])
     except ValueError:
         await update.message.reply_text(
-            "Id must be a number. Example: /delete Milk 2",
+            "Id must be a number at the end. Example: /delete Powder detergent 1",
             reply_markup=main_menu_keyboard(),
         )
         return
 
+
     sheet_key = normalize_sheet(sheet_name_input)
+
 
     items = []
     for idx, parsed in enumerate(ALL_PRODUCTS):
@@ -397,20 +441,24 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sheet_name = choose_sheet_name(calc)
         items.append((idx, sheet_name, calc))
 
+
     by_sheet: defaultdict[str, list[tuple[int, dict]]] = defaultdict(list)
     for global_idx, sheet_name, calc in items:
         by_sheet[normalize_sheet(sheet_name)].append((global_idx, calc))
 
+
     for s in by_sheet:
         by_sheet[s].sort(key=lambda t: t[1].get("date") or "")
+
 
     if sheet_key not in by_sheet:
         await update.message.reply_text(
             f"Sheet '{sheet_name_input}' not found. "
-            "Check the sheet name in Excel (Oil, Milk, Data, Toilet, etc.).",
+            "Check the sheet name in /list.",
             reply_markup=main_menu_keyboard(),
         )
         return
+
 
     rows = by_sheet[sheet_key]
     if sheet_row_id < 1 or sheet_row_id > len(rows):
@@ -420,12 +468,18 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+
+    # Map back to global index and delete
     global_idx, _ = rows[sheet_row_id - 1]
+    # To handle the list shifting after pop, we sort the indexes descending if deleting multiple, 
+    # but since it's one by one, we just need to ensure ALL_PRODUCTS index is correct.
     removed = ALL_PRODUCTS.pop(global_idx)
+
 
     SHEET_ROWS = _rebuild_sheet_rows()
     excel_bytes = build_excel_from_sheet_dict(SHEET_ROWS)
     total_rows = sum(len(v) for v in SHEET_ROWS.values())
+
 
     await update.message.reply_document(
         document=InputFile(excel_bytes, filename="calculation_result.xlsx"),
@@ -439,23 +493,28 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+
 async def delete_sheet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
+    UPDATED: Handles multi-word sheet names and case-insensitivity.
     /delete_sheet <SheetName>
-    Deletes ALL products that belong to that sheet.
-    Example: /delete_sheet Milk
+    Example: /delete_sheet Powder detergent
     """
     if not context.args:
         await update.message.reply_text(
-            "Usage: /delete_sheet <SheetName>\nExample: /delete_sheet Milk",
+            "Usage: /delete_sheet <SheetName>\nExample: /delete_sheet Powder detergent",
             reply_markup=main_menu_keyboard(),
         )
         return
 
+
     global ALL_PRODUCTS, SHEET_ROWS
 
-    sheet_name_input = context.args[0]
+
+    # Join all args to capture names like "Powder detergent"
+    sheet_name_input = " ".join(context.args).strip()
     sheet_key = normalize_sheet(sheet_name_input)
+
 
     remaining = []
     removed = []
@@ -467,6 +526,7 @@ async def delete_sheet_command(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             remaining.append(parsed)
 
+
     if not removed:
         await update.message.reply_text(
             f"No products found in sheet '{sheet_name_input}'.",
@@ -474,10 +534,12 @@ async def delete_sheet_command(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
+
     ALL_PRODUCTS = remaining
     SHEET_ROWS = _rebuild_sheet_rows()
     excel_bytes = build_excel_from_sheet_dict(SHEET_ROWS)
     total_rows = sum(len(v) for v in SHEET_ROWS.values())
+
 
     await update.message.reply_document(
         document=InputFile(excel_bytes, filename="calculation_result.xlsx"),
@@ -489,11 +551,14 @@ async def delete_sheet_command(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
+
 def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set")
 
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
@@ -501,13 +566,17 @@ def main():
     app.add_handler(CommandHandler("about", about_command))
     app.add_handler(CommandHandler("summary", summary_command))
 
+
     app.add_handler(CommandHandler("list", list_products))
     app.add_handler(CommandHandler("delete", delete_command))
     app.add_handler(CommandHandler("delete_sheet", delete_sheet_command))
 
+
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
+
     app.run_polling()
+
 
 
 if __name__ == "__main__":
